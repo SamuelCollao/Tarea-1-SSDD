@@ -1,0 +1,123 @@
+version: '3.8'
+
+services:
+
+    #  Base de datos PostgreSQL
+    postgres_db:
+        image: postgres:15-alpine
+        container_name: postgres_db
+        environment:
+            POSTGRES_USER: user_SSDD
+            POSTGRES_PASSWORD: SSDDcontraseña
+            POSTGRES_DB: yahoo_respuestas_db
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+        ports:
+            - "5432:5432"
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+        restart: always
+
+
+    #  Servidor RabbitMQ
+    rabbitmq:
+        image: rabbitmq:3-management-alpine
+        container_name: rabbitmq
+        ports:
+            - "5672:5672"
+            - "15672:15672"
+        healthcheck:
+            test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+        restart: always
+
+    #  Servidor Redis para cache
+    redis_cache:
+        image: redis:7-alpine
+        container_name: redis_cache
+        command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lfu
+        volumes:
+            - redis_data:/data
+        ports:
+            - "6379:6379"
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 3s
+            timeout: 3s
+            retries: 5
+        restart: always
+
+    # modulos de la aplicacion
+    generador_trafico:
+        build:
+            context: ./generador_trafico
+        container_name: generador_trafico
+        depends_on:
+            rabbitmq:
+                condition: service_healthy
+        environment:
+            RABBITMQ_HOST: rabbitmq
+        volumes:
+            - ./data:/app/data
+
+    almacenamiento_servicio:
+        build:
+            context: ./almacenamiento
+        container_name: almacenamiento_servicio
+        depends_on:
+            rabbitmq:
+                condition: service_healthy
+            postgres_db:
+                condition: service_healthy
+        environment:
+            RABBITMQ_HOST: rabbitmq
+            DB_HOST: postgres_db
+            DB_NAME: yahoo_respuestas_db
+            DB_USER: user_SSDD
+            DB_PASS: SSDDcontraseña
+        ports:
+            - "5000:5000"
+        healthcheck:
+            test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            
+    cache:
+        build:
+            context: ./cache
+        container_name: cache
+        depends_on:
+            rabbitmq:
+                condition: service_healthy
+            redis_cache:
+                condition: service_healthy
+            almacenamiento_servicio:
+                condition: service_healthy
+        environment:
+            RABBITMQ_HOST: rabbitmq
+            REDIS_HOST: redis_cache
+            ALMACENAMIENTO_HOST: almacenamiento_servicio
+
+    generador_score:
+        build:
+            context: ./generador_score
+        container_name: generador_score
+        depends_on:
+            rabbitmq:
+                condition: service_healthy
+        environment:
+            RABBITMQ_HOST: rabbitmq
+            GEMINI_API_KEY: ${GEMINI_API_KEY}
+            GEMINI_MODEL: gemini-2.5-flash-preview-05-20
+            GEMINI_API_URL: https://generativelanguage.googleapis.com/v1beta/models
+    
+            
+volumes:
+    postgres_data:
+    redis_data:

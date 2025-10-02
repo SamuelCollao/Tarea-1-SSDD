@@ -1,0 +1,6 @@
+pika
+requests
+scipy
+torch
+sentence-transformers
+bert-score
