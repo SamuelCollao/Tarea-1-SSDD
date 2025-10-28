@@ -1,3 +1,4 @@
-pika
+kafka-python
+requests
 pandas
-numpy
+psycopg2-binary
