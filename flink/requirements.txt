@@ -3,3 +3,7 @@ kafka-python
 sentence-transformers
 scikit-learn
 torch
+kafka-python
+requests
+pandas
+psycopg2-binary

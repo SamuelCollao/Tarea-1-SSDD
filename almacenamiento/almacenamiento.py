@@ -8,20 +8,20 @@ from kafka.errors import NoBrokersAvailable
 KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'kafka:9092')
 Topic_input = 'resultado_final'
 
-DB_HOST = os.getenv('DB_HOST', 'postgres_db')
-DB_NAME = os.getenv('DB_NAME', 'yahoo_respuestas_db')      
-DB_PASS = os.getenv('DB_PASS', 'SSDDcontraseña')
-DB_USER = os.getenv('DB_USER', 'user_SSDD')
+POSTGRES_HOST = os.getenv('POSTGRES_HOST', 'postgres_db')
+POSTGRES_USER = os.getenv('POSTGRES_USER')
+POSTGRES_PASSWORD = os.getenv('POSTGRES_PASSWORD')
+POSTGRES_DB = os.getenv('POSTGRES_DB')
 
 
 def connect_db():
     while True:
         try:
             conn = psycopg2.connect(
-                host=DB_HOST,
-                database=DB_NAME,
-                user=DB_USER,
-                password=DB_PASS
+                host=POSTGRES_HOST,
+                database=POSTGRES_DB,
+                user=POSTGRES_USER,
+                password=POSTGRES_PASSWORD
             )
             print("Conexión exitosa a la base de datos")
             return conn
@@ -29,24 +29,26 @@ def connect_db():
             print(f"Error de conexión a la base de datos: {e}")
             time.sleep(5)
 
-def init_db():
-    conn = connect_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS resultados (
-            id SERIAL PRIMARY KEY,
-            question_key TEXT UNIQUE NOT NULL,
-            question_content TEXT NOT NULL,
-            best_answer TEXT,
-            llm_answer TEXT,
-            score REAL,
-            veces_consultada INTEGER DEFAULT 1,
-        );
-    """)
-    conn.commit()
-    cursor.close()
-    conn.close()
-    print("Base de datos inicializada")
+def init_db(conn):
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS resultados (
+                    id SERIAL PRIMARY KEY,
+                    question_key TEXT UNIQUE NOT NULL,
+                    question_content TEXT NOT NULL,
+                    best_answer TEXT,
+                    llm_answer TEXT,
+                    score REAL,
+                    veces_consultada INTEGER DEFAULT 1
+                );
+            """)
+        conn.commit()
+        print("Almacenamiento: Esquema de la tabla 'resultados' verificado y/o creado.")
+    except psycopg2.Error as e:
+        print(f"Almacenamiento: Error al inicializar el esquema: {e}")
+        conn.rollback()
+        raise
 
 def get_kafka_consumer(topic):
     while True:

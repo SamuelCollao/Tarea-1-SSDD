@@ -1,9 +1,17 @@
-FROM flink:latest
+FROM flink:1.18.1-java11
 
-WORKDIR /app
+USER root
 
-RUN apt-get update && apt-get install -y pyhton3 python3-pip git
-COPY requirements.txt .
-RUN pip3 install pyflink kafka-python
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip wget build-essential libpq-dev && \
+    ln -s /usr/bin/python3 /usr/bin/python && \
+    rm -rf /var/lib/apt/lists/*
 
-COPY flink.py /app/
+RUN pip3 install \
+    apache-flink==1.18.1 \
+    requests \
+    psycopg2-binary
+
+WORKDIR /opt/flink/usrlib
+COPY ./flink.py .
+USER flink

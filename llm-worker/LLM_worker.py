@@ -5,7 +5,7 @@ import time
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import NoBrokersAvailable
 
-KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'kafka:9092')
+KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'kafka:29092')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 GEMINI_MODEL = os.getenv('GEMINI_MODEL')
 GEMINI_API_URL = os.getenv('GEMINI_API_URL')
@@ -21,8 +21,9 @@ def get_kafka_producer():
             producer = KafkaProducer(
                 bootstrap_servers=KAFKA_BROKER,
                 value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+                api_version=(0, 10),
                 acks='all',
-                retrises=5,
+                retries=5
             )
             print("Conexión exitosa al productor de Kafka")
             return producer
@@ -30,26 +31,26 @@ def get_kafka_producer():
             print(f"Kakfa productor no disponible: {e}. Reintentando en 5 segundos...")
             time.sleep(5)
 
-def get_kafka_consumer(topics):
+def get_kafka_consumer():
     while True:
         try:
             consumer = KafkaConsumer(
-                *topics,
+                *Topic_input,
                 bootstrap_servers=KAFKA_BROKER,
                 value_deserializer=lambda m: json.loads(m.decode('utf-8')),
                 auto_offset_reset='earliest',
                 group_id='llm_worker_group'
             )
-            print("Consumidor de Kafka conectado a los topics: {topics}")
+            print(f"Consumidor de Kafka conectado a los topics: {Topic_input}")
             return consumer
         except NoBrokersAvailable as e:
             print(f"Kakfa consumidor no disponible: {e}. Reintentando en 5 segundos...")
             time.sleep(5)
 
-def call_gemini_api(question_content):
+def call_gemini_api(question_title):
     if not GEMINI_API_KEY:
         print("[LLM/Error] La clave de API de Gemini no está configurada.")
-        return 500, {"error": "API key no configurada"}
+        return None, 500
 
     headers = {
         'Content-Type': 'application/json'
@@ -57,7 +58,7 @@ def call_gemini_api(question_content):
     payload = {
         "contents": [{
             "parts": [{
-                "text": f"Genera una respuesta detallada y precisa a la siguiente pregunta: {question_content}"}]}],
+                "text": f"Genera una respuesta detallada y precisa a la siguiente pregunta: {question_title}"}]}],
         "tools": [{"google_search":{}}],
     }
   
@@ -83,7 +84,7 @@ def call_gemini_api(question_content):
 
 def main():
     producer = get_kafka_producer()
-    consumer = get_kafka_consumer(Topic_input)
+    consumer = get_kafka_consumer()
 
     print("LLM Worker iniciado y escuchando mensajes...")
 
@@ -91,15 +92,16 @@ def main():
         data = message.value
         print(f"\nProcesando mensaje de {message.topic}: {data['question_key']}")
 
-        status_code, response = call_gemini_api(data['question_content'])
+        status_code, response = call_gemini_api(data['question_title'])
 
         # Exito del mensaje ("200 OK")
-        if status_code == 200:
+        if status_code == 200 and response:
             output_message = {
                 'question_key': data['question_key'],
                 'question_content': data['question_content'],
                 'best_answer': data['best_answer'],
-                'llm_answer': response
+                'llm_answer': response,
+                'question_title': data['question_title']
             }
             producer.send(Topic_success, output_message)
             print(f"[LLM/Success] Mensaje procesado correctamente. Enviado a {Topic_success}")
@@ -120,6 +122,9 @@ def main():
         # Otros errores
         else:
             print(f"[LLM/Error] Error {status_code} no manejado. Mensaje descartado.")
+
+        producer.flush()
+
 
 if __name__ == "__main__":
 
