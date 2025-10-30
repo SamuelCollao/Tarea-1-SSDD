@@ -121,6 +121,7 @@ services:
                 condition: service_healthy
             postgres_db:
                 condition: service_healthy
+        mem_limit: 512m
         environment:
             KAFKA_BROKER: kafka:29092
             POSTGRES_HOST: postgres_db
@@ -138,6 +139,7 @@ services:
         depends_on:
             kafka:
                 condition: service_healthy
+        mem_limit: 512m
         environment:
             KAFKA_BROKER: kafka:29092
             GEMINI_API_KEY: ${GEMINI_API_KEY}

@@ -11,9 +11,9 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
 KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'kafka:9092')
-Topic_input = 'nueva_pregunta'
+Topic_input = 'llm_success'
 Topic_output_final = 'resultado_final'
-Topic_output_regenerate = 'pregunta_regenerada'
+Topic_output_regenerate = 'nueva_pregunta'
 
 SCORE_THRESHOLD = 0.8
 
@@ -22,12 +22,12 @@ MODEL = None
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 INPUT_SCHEMA = Types.ROW_NAMED(
-    ['question_key', 'question_content','best_answer','llm_answer'],
-    [Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING()])
+    ['question_key','question_title','best_answer','llm_answer','veces_consultada'],
+    [Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING(),Types.INT()])
 
 OUTPUT_SCHEMA = Types.ROW_NAMED(
-    ['question_key', 'question_content','best_answer','llm_answer','score'],
-    [Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING(), Types.FLOAT()])
+    ['question_key', 'question_title','best_answer','llm_answer','veces_consultadas','score'],
+    [Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING(), Types.INT(), Types.FLOAT()])
 
 
 def init_model():
@@ -56,7 +56,7 @@ def calculate_quality_score(row):
 
     if llm_answer and best_answer:
         try:
-            embeddings = model.encode([llm_answer, best_answer], cnvert_to_tensor=True)
+            embeddings = model.encode([llm_answer, best_answer], convert_to_tensor=True)
             emb_np = embeddings.cpu().numpy()
             similitud = cosine_similarity([emb_np[0]], [emb_np[1]])[0][0]
             score = max(0.0, min(1.0, similitud))
@@ -79,26 +79,28 @@ def filtrar(stream):
         .filter(lambda row: row.score < SCORE_THRESHOLD \
         .map(lambda row: {
             'question_key': row.question_key,
-            'question_content': row.question_content,
+            'question_title': row.question_title,
             'best_answer': row.best_answer,
-            'question_title': row.question_title
-            },output_type=Types.MAP()))
+            'llm_answer': row.llm_answer,
+            'veces_consultadas': row.veces_consultadas,
+            'score': row.score
+            }, output_type=Types.MAP()))
     
     score_alta_calidad = score_stream \
         .filter(lambda row: row.score >= SCORE_THRESHOLD \
         .map(lambda row: {
             'question_key': row.question_key,
-            'llm_answer': row.llm_answer,
-            'score': row.score,
-            'question_content': row.question_content,
+            'question_title': row.question_title,
             'best_answer': row.best_answer,
-            'question_title': row.question_title
-            },output_type=Types.MAP()))
+            'llm_answer': row.llm_answer,
+            'veces_consultadas': row.veces_consultadas,
+            'score': row.score
+            }, output_type=Types.MAP()))
     
     sink_baja_calidad = KafkaSink.builder() \
         .set_bootstrap_servers(KAFKA_BROKER) \
         .set_topic(Topic_output_regenerate) \
-        .set_value_serialization_schema(JsonRowSerializationSchema.builder()) \
+        .set_value_serialization_schema(JsonRowSerializationSchema.builder().with_type_info(Types.MAP()).build()) \
         .build()
     score_baja_calidad.sink_to(sink_baja_calidad)
     print(f"Preguntas de baja calidad enviadas a '{Topic_output_regenerate}'")
@@ -106,7 +108,7 @@ def filtrar(stream):
     sink_alta_calidad = KafkaSink.builder() \
         .set_bootstrap_servers(KAFKA_BROKER) \
         .set_topic(Topic_output_final) \
-        .set_value_serialization_schema(JsonRowSerializationSchema.builder()) \
+        .set_value_serialization_schema(JsonRowSerializationSchema.builder().with_type_info(Types.MAP()).build()) \
         .build()
     score_alta_calidad.sink_to(sink_alta_calidad)
     print(f"Preguntas de alta calidad enviadas a '{Topic_output_final}'")

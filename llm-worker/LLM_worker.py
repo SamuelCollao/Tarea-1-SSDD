@@ -39,7 +39,10 @@ def get_kafka_consumer():
                 bootstrap_servers=KAFKA_BROKER,
                 value_deserializer=lambda m: json.loads(m.decode('utf-8')),
                 auto_offset_reset='earliest',
-                group_id='llm_worker_group'
+                group_id='llm_worker_group',
+                api_version=(0,10,2),
+                session_timeout_ms=30000,
+                heartbeat_interval_ms=10000
             )
             print(f"Consumidor de Kafka conectado a los topics: {Topic_input}")
             return consumer
@@ -98,8 +101,8 @@ def main():
         if status_code == 200 and response:
             output_message = {
                 'question_key': data['question_key'],
-                'question_content': data['question_content'],
-                'best_answer': data['best_answer'],
+                'question_content': data.get('question_content', None),
+                'best_answer': data.get('best_answer', None),
                 'llm_answer': response,
                 'question_title': data['question_title']
             }

@@ -50,26 +50,29 @@ def init_db(conn):
         conn.rollback()
         raise
 
-def get_kafka_consumer(topic):
+def get_kafka_consumer():
     while True:
         try:
             consumer = KafkaConsumer(
-                topic,
+                Topic_input,
                 bootstrap_servers=KAFKA_BROKER,
-                group_id='almacenamiento_group',
                 value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-                auto_offset_reset='earliest'
+                auto_offset_reset='earliest',
+                group_id='almacenamiento_group',
+                api_version=(0,10,2),
+                session_timeout_ms=30000,
+                heartbeat_interval_ms=10000
             )
-            print("Conectado a Kafka como consumidor.")
+            print(f"Consumidor de Kafka conectado a los topics: {Topic_input}")
             return consumer
-        except NoBrokersAvailable:
-            print("Kafka consumidor no disponible, reintentando en 5 segundos...")
+        except NoBrokersAvailable as e:
+            print(f"Kakfa consumidor no disponible: {e}. Reintentando en 5 segundos...")
             time.sleep(5)
 
 def main():
     conn = connect_db()
     init_db(conn)
-    consumer = get_kafka_consumer(Topic_input)
+    consumer = get_kafka_consumer()
 
     print(f"Almacenamiento iniciado, esperando mensajes...")
 
@@ -85,6 +88,7 @@ def main():
                     ON CONFLICT (question_key) DO UPDATE SET
                         llm_answer = EXCLUDED.llm_answer,
                         score = EXCLUDED.score,
+                        veces_consultada = resultados.veces_consultada + 1
                 """,(
                     data['question_key'],
                     data.get('question_title'),
@@ -95,7 +99,6 @@ def main():
                 ))
 
             conn.commit()
-            consumer.commit()
             print(f"[DB/SUCCESS] Pregunta {data['question_id']} almacenada en la base de datos.")
         
         except psycopg2.Error as e:
