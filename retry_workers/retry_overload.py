@@ -5,7 +5,7 @@ from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import NoBrokersAvailable
 
 KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'kafka:9092')
-Topic_input = 'llm_retry_overload'
+Topic_input = 'llm_failure_overload'
 Topic_output = 'nueva_pregunta'
 Topic_dlq = 'llm_dead_letter_queue'
 
@@ -33,7 +33,7 @@ def get_kafka_consumer():
                 bootstrap_servers=KAFKA_BROKER,
                 value_deserializer=lambda m: json.loads(m.decode('utf-8')),
                 auto_offset_reset='earliest',
-                group_id='rety_overload_group',
+                group_id='retry_overload_group',
                 api_version=(0,10,2),
                 session_timeout_ms=30000,
                 heartbeat_interval_ms=10000
@@ -70,7 +70,6 @@ def main():
             print(f"Reintento {retry_contador} para {data['question_key']}.")
 
         producer.flush()
-        consumer.commit()
 
 if __name__ == "__main__":
     main()

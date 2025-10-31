@@ -5,7 +5,7 @@ from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import NoBrokersAvailable
 
 KAFKA_BROKER = os.getenv("KAFKA_BROKER", "kafka:9092")
-Topic_input = 'llm_retry_quota'
+Topic_input = 'llm_failure_quota'
 Topic_output = 'nueva_pregunta'
 RETRY_DELAY = int(os.getenv("QUOTA_RETRY_DELAY", "60"))
 
@@ -55,7 +55,6 @@ def main():
 
         producer.send(Topic_output, data)
         producer.flush()
-        consumer.commit()
         print(f"Reintento para {Topic_input}.")
     
 if __name__ == "__main__":

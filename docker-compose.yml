@@ -181,6 +181,7 @@ services:
     flink_job:
         build: 
             context: ./flink
+            dockerfile: Dockerfile
         container_name: flink_job
         depends_on:
             kafka: 
