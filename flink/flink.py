@@ -13,7 +13,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'kafka:9092')
 Topic_input = 'llm_success'
 Topic_output_final = 'resultado_final'
-Topic_output_regenerate = 'nueva_pregunta'
+Topic_output_regenerate = 'generar_flink'
 
 SCORE_THRESHOLD = 0.8
 
@@ -22,12 +22,12 @@ MODEL = None
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 INPUT_SCHEMA = Types.ROW_NAMED(
-    ['question_key','question_title','best_answer','llm_answer','veces_consultada'],
-    [Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING(),Types.INT()])
+['question_key', 'question_content', 'best_answer', 'llm_answer', 'question_title'],
+    [Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING()])
 
 OUTPUT_SCHEMA = Types.ROW_NAMED(
-    ['question_key', 'question_title','best_answer','llm_answer','veces_consultadas','score'],
-    [Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING(), Types.INT(), Types.FLOAT()])
+    ['question_key', 'question_content', 'best_answer', 'llm_answer', 'question_title', 'score'],
+    [Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING(), Types.STRING(), Types.FLOAT()])
 
 
 def init_model():
@@ -76,7 +76,7 @@ def filtrar(stream):
     )
 
     score_baja_calidad = score_stream \
-        .filter(lambda row: row.score < SCORE_THRESHOLD \
+        .filter(lambda row: row.score < SCORE_THRESHOLD) \
         .map(lambda row: {
             'question_key': row.question_key,
             'question_title': row.question_title,
@@ -84,10 +84,10 @@ def filtrar(stream):
             'llm_answer': row.llm_answer,
             'veces_consultadas': row.veces_consultadas,
             'score': row.score
-            }, output_type=Types.MAP()))
+            }, output_type=Types.MAP())
     
     score_alta_calidad = score_stream \
-        .filter(lambda row: row.score >= SCORE_THRESHOLD \
+        .filter(lambda row: row.score >= SCORE_THRESHOLD) \
         .map(lambda row: {
             'question_key': row.question_key,
             'question_title': row.question_title,
@@ -95,7 +95,7 @@ def filtrar(stream):
             'llm_answer': row.llm_answer,
             'veces_consultadas': row.veces_consultadas,
             'score': row.score
-            }, output_type=Types.MAP()))
+            }, output_type=Types.MAP())
     
     sink_baja_calidad = KafkaSink.builder() \
         .set_bootstrap_servers(KAFKA_BROKER) \
@@ -130,7 +130,7 @@ def flink_job():
     data = env.from_source(kafka_source, "Kafka Source", None)
 
     filtrar(data)
-    print("Flink job iniciado, escuchando en el tópico '{Topic_input}'...")
+    print(f"Flink job iniciado, escuchando en el tópico '{Topic_input}'...")
     env.execute("Flink LLM Answer Quality Scoring")
 
 if __name__ == "__main__":

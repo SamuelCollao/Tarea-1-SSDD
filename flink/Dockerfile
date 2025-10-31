@@ -1,17 +1,11 @@
-FROM flink:1.18.1-java11
+FROM flink:1.18
 
-USER root
+WORKDIR /app
 
-RUN apt-get update && \
-    apt-get install -y python3 python3-pip wget build-essential libpq-dev && \
-    ln -s /usr/bin/python3 /usr/bin/python && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y python3 python3-pip git
 
-RUN pip3 install \
-    apache-flink==1.18.1 \
-    requests \
-    psycopg2-binary
+COPY requirements.txt .
 
-WORKDIR /opt/flink/usrlib
-COPY ./flink.py .
-USER flink
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+COPY flink.py /app/

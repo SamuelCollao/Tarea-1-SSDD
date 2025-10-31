@@ -69,8 +69,7 @@ services:
             - "8081:8081"
         command: jobmanager
         volumes:
-            - ./flink_code:/opt/flink/usrlib
-            - ./flink_code/flink.py:/app/flink.py
+            - ./flink:/opt/flink/usrlib
         environment:
             - |
                 FLINK_PROPERTIES=
@@ -84,7 +83,7 @@ services:
             - flink-jobmanager
         command: taskmanager
         volumes:
-            - ./flink_code:/opt/flink/usrlib
+            - ./flink:/opt/flink/usrlib
         environment:
             - |
                 FLINK_PROPERTIES=
@@ -111,6 +110,8 @@ services:
         volumes:
             - ./data:/app/data
         command: ["python","generador_trafico.py"]
+        restart: unless-stopped
+
 
     almacenamiento_servicio:
         build:
@@ -172,7 +173,7 @@ services:
         environment:
             KAFKA_BROKER: kafka:29092
             OVERLOAD_BASE_DELAY: 5
-            OVERLAOD_MAX_RETRIES: 4
+            OVERLOAD_MAX_RETRIES: 4
         command: ["python","retry_overload.py"]
         restart: unless-stopped
 
@@ -180,7 +181,6 @@ services:
     flink_job:
         build: 
             context: ./flink
-            dockerfile: Dockerfile
         container_name: flink_job
         depends_on:
             kafka: 
@@ -189,9 +189,11 @@ services:
                 condition: service_started
             postgres_db:
                 condition: service_healthy
+        environment:
+            - KAFKA_BROKER: kafka:29092
         volumes:
-            - ./flink_code:/app
-        command: /opt/flink/bin/flink run /opt/flink/usrlib/flink.py
+            - ./flink:/app
+        command: flink run --python /app/flink.py
             
 volumes:
     postgres_data:
