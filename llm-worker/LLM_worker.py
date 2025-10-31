@@ -60,9 +60,9 @@ def call_gemini_api(question_title):
     }
     payload = {
         "contents": [{
+            "rol": "user",
             "parts": [{
-                "text": f"Genera una respuesta detallada y precisa a la siguiente pregunta: {question_title}"}]}],
-        "tools": [{"google_search":{}}],
+                "text": f"Genera una respuesta detallada y precisa a la siguiente pregunta: {question_title}"}]}]
     }
   
     try:

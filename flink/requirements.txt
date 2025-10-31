@@ -1,9 +1,6 @@
-pyflink
-kafka-python
+apache-flink==1.18.1
+numpy
+torch
 sentence-transformers
 scikit-learn
-torch
-kafka-python
-requests
-pandas
-psycopg2-binary
+huggingface-hub<1.0

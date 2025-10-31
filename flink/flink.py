@@ -4,10 +4,11 @@ import random
 import numpy as np
 import torch
 from pyflink.datastream import StreamExecutionEnvironment
-from pyflink.datastream.connectors.kafka import KafkaSource, KafkaSink
+from pyflink.datastream.connectors.kafka import KafkaSource, KafkaSink, KafkaOffsetsInitializer, KafkaRecordSerializationSchema
 from pyflink.datastream.formats.json import JsonRowDeserializationSchema, JsonRowSerializationSchema
 from pyflink.common.typeinfo import Types
 from sentence_transformers import SentenceTransformer
+from pyflink.common.watermark_strategy import WatermarkStrategy
 from sklearn.metrics.pairwise import cosine_similarity
 
 KAFKA_BROKER = os.getenv('KAFKA_BROKER', 'kafka:9092')
@@ -76,40 +77,34 @@ def filtrar(stream):
     )
 
     score_baja_calidad = score_stream \
-        .filter(lambda row: row.score < SCORE_THRESHOLD) \
-        .map(lambda row: {
-            'question_key': row.question_key,
-            'question_title': row.question_title,
-            'best_answer': row.best_answer,
-            'llm_answer': row.llm_answer,
-            'veces_consultadas': row.veces_consultadas,
-            'score': row.score
-            }, output_type=Types.MAP())
+        .filter(lambda row: row.score < SCORE_THRESHOLD)
     
     score_alta_calidad = score_stream \
         .filter(lambda row: row.score >= SCORE_THRESHOLD) \
-        .map(lambda row: {
-            'question_key': row.question_key,
-            'question_title': row.question_title,
-            'best_answer': row.best_answer,
-            'llm_answer': row.llm_answer,
-            'veces_consultadas': row.veces_consultadas,
-            'score': row.score
-            }, output_type=Types.MAP())
-    
+
+    serializer_baja_calidad = KafkaRecordSerializationSchema.builder() \
+        .set_topic(Topic_output_regenerate) \
+        .set_value_serialization_schema(JsonRowSerializationSchema.builder().with_type_info(OUTPUT_SCHEMA).build()) \
+        .build()
+
     sink_baja_calidad = KafkaSink.builder() \
         .set_bootstrap_servers(KAFKA_BROKER) \
-        .set_topic(Topic_output_regenerate) \
-        .set_value_serialization_schema(JsonRowSerializationSchema.builder().with_type_info(Types.MAP()).build()) \
+        .set_record_serializer(serializer_baja_calidad) \
         .build()
+
     score_baja_calidad.sink_to(sink_baja_calidad)
     print(f"Preguntas de baja calidad enviadas a '{Topic_output_regenerate}'")
 
+    serializer_alta_calidad = KafkaRecordSerializationSchema.builder() \
+        .set_topic(Topic_output_final) \
+        .set_value_serialization_schema(JsonRowSerializationSchema.builder().with_type_info(OUTPUT_SCHEMA).build()) \
+        .build()
+    
     sink_alta_calidad = KafkaSink.builder() \
         .set_bootstrap_servers(KAFKA_BROKER) \
-        .set_topic(Topic_output_final) \
-        .set_value_serialization_schema(JsonRowSerializationSchema.builder().with_type_info(Types.MAP()).build()) \
+        .set_record_serializer(serializer_alta_calidad) \
         .build()
+
     score_alta_calidad.sink_to(sink_alta_calidad)
     print(f"Preguntas de alta calidad enviadas a '{Topic_output_final}'")
 
@@ -124,10 +119,10 @@ def flink_job():
         .set_value_only_deserializer(
             JsonRowDeserializationSchema.builder().type_info(INPUT_SCHEMA).build()
         ) \
-        .set_starting_offsets() \
+        .set_starting_offsets(KafkaOffsetsInitializer.earliest()) \
         .build()
     
-    data = env.from_source(kafka_source, "Kafka Source", None)
+    data = env.from_source(kafka_source, WatermarkStrategy.no_watermarks(), "Kafka Source")
 
     filtrar(data)
     print(f"Flink job iniciado, escuchando en el tópico '{Topic_input}'...")
