@@ -190,7 +190,7 @@ services:
             postgres_db:
                 condition: service_healthy
         environment:
-            - KAFKA_BROKER: kafka:29092
+            KAFKA_BROKER: kafka:29092
         volumes:
             - ./flink:/app
         command: flink run --python /app/flink.py
